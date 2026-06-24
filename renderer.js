@@ -344,18 +344,53 @@ function panelColorAt(u, v, random, palette, variant = 0) {
 
 function recipeForState() {
   if (state.architecture === 'horizon') return studyById('blue-room');
-  if (state.architecture === 'monolith' && state.paletteMood === 'ember') return studyById('chromatic-ember');
+  if (state.architecture === 'monolith') return studyById(state.paletteMood === 'ember' ? 'chromatic-ember' : RECIPE_BY_PALETTE[state.paletteMood]);
+  if (state.architecture === 'field' && state.paletteMood === 'chroma') return studyById('violet-sunset');
   return studyById(RECIPE_BY_PALETTE[state.paletteMood] ?? 'ember-rose');
+}
+
+function architectureProfile() {
+  const profiles = {
+    aperture: { cx: 0.5, cy: 0.5, coreW: 0.24, coreH: 0.36, corePower: 0.72, haloPower: 0.38, topPower: 0.42, bottomPower: 0.52 },
+    field: { cx: 0.52, cy: 0.48, coreW: 0.36, coreH: 0.3, corePower: 0.28, haloPower: 0.5, topPower: 0.24, bottomPower: 0.6 },
+    horizon: { cx: 0.5, cy: 0.3, coreW: 0.48, coreH: 0.16, corePower: 0.5, haloPower: 0.32, topPower: 0.78, bottomPower: 0.26 },
+    monolith: { cx: 0.5, cy: 0.52, coreW: 0.18, coreH: 0.52, corePower: 0.62, haloPower: 0.28, topPower: 0.46, bottomPower: 0.34 },
+  };
+  return profiles[state.architecture] ?? profiles.aperture;
+}
+
+function blendTuning() {
+  const tunings = {
+    screen: { alpha: 0.22, saturation: 1.3, contrast: 1.02, operation: 'screen' },
+    'source-over': { alpha: 0.16, saturation: 1.05, contrast: 0.98, operation: 'source-over' },
+    'soft-light': { alpha: 0.2, saturation: 1.16, contrast: 1.08, operation: 'soft-light' },
+    overlay: { alpha: 0.18, saturation: 1.22, contrast: 1.14, operation: 'overlay' },
+    'color-dodge': { alpha: 0.1, saturation: 1.28, contrast: 1.04, operation: 'color-dodge' },
+  };
+  return tunings[state.blendMode] ?? tunings.screen;
 }
 
 function tintRecipeColor(hex, u, v) {
   const palette = state.colors.length >= 5 ? state.colors : PALETTES[state.paletteMood];
   const [, rim, body, lower, accent = body, dark = palette[0]] = palette;
+  const profile = architectureProfile();
+  const depth = state.depth / 100;
+  const aperture = state.core / 100;
+  const asymmetry = state.asymmetry / 100;
+  const warpedU = clamp(u + (v - 0.5) * asymmetry * 0.1, 0, 1);
+  const warpedV = clamp(v + Math.sin(u * Math.PI) * (asymmetry - 0.5) * 0.045, 0, 1);
+  const centerX = profile.cx + (asymmetry - 0.5) * 0.12;
+  const centerY = profile.cy + (0.5 - asymmetry) * 0.04;
+  const coreW = profile.coreW * (0.72 + aperture * 0.74);
+  const coreH = profile.coreH * (0.72 + aperture * 0.74);
   const rgb = hexToRgb(hex);
   const luminance = (rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722) / 255;
-  const bottom = smoothstep(0.52, 0.9, v);
-  const top = smoothstep(0.42, 0.04, v);
-  const center = gaussian(u, 0.5, 0.22) * gaussian(v, 0.52, 0.3);
+  const bottom = smoothstep(0.52, 0.9, warpedV) * profile.bottomPower;
+  const top = smoothstep(0.42, 0.04, warpedV) * profile.topPower;
+  const center = gaussian(warpedU, centerX, coreW * 1.25) * gaussian(warpedV, centerY, coreH * 1.08);
+  const coreDistance = Math.max(Math.abs((warpedU - centerX) / coreW), Math.abs((warpedV - centerY) / coreH));
+  const core = smoothstep(1.06, 0.42, coreDistance) * profile.corePower;
+  const halo = smoothstep(1.8, 0.84, coreDistance) * profile.haloPower;
   let target = rim;
 
   if (luminance < 0.12) target = dark;
@@ -364,8 +399,10 @@ function tintRecipeColor(hex, u, v) {
   else if (top > 0.52) target = mix(body, dark, 0.42);
   else target = body;
 
-  const tint = state.architecture === 'diptych' ? 0.03 : 0.08;
-  return mixRgb(rgb, hexToRgb(target), tint);
+  let result = mixRgb(rgb, hexToRgb(target), 0.06 + depth * 0.05);
+  result = mixRgb(result, hexToRgb(accent), halo * (0.18 + depth * 0.18));
+  result = mixRgb(result, hexToRgb(dark), core * (0.4 + aperture * 0.42));
+  return result;
 }
 
 function createRecipeField() {
@@ -437,6 +474,11 @@ function renderGradient() {
   const baseBlur = Math.max(width, height) * (0.012 + state.blur / 3200);
   const base = state.colors[0] ?? '#020202';
   const recipeField = createRecipeField();
+  const blend = blendTuning();
+  const asymmetry = state.asymmetry / 100;
+  const skewX = (asymmetry - 0.5) * width * 0.028;
+  const skewY = (0.5 - asymmetry) * height * 0.014;
+  const apertureScale = 1 + (state.core - 50) / 2600;
 
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = base;
@@ -445,14 +487,14 @@ function renderGradient() {
   ctx.save();
   ctx.imageSmoothingEnabled = true;
   ctx.filter = `blur(${baseBlur}px) saturate(${1.08 + state.bloom / 520}) contrast(${state.contrast / 100})`;
-  ctx.drawImage(recipeField, 0, 0, width, height);
+  ctx.drawImage(recipeField, skewX, skewY, width * apertureScale, height / apertureScale);
   ctx.restore();
 
   ctx.save();
-  ctx.globalAlpha = 0.16 + state.bloom / 650;
-  ctx.globalCompositeOperation = 'screen';
-  ctx.filter = `blur(${baseBlur * 0.52}px) saturate(1.28)`;
-  ctx.drawImage(recipeField, 0, 0, width, height);
+  ctx.globalAlpha = blend.alpha + state.bloom / 780;
+  ctx.globalCompositeOperation = blend.operation;
+  ctx.filter = `blur(${baseBlur * 0.52}px) saturate(${blend.saturation}) contrast(${blend.contrast})`;
+  ctx.drawImage(recipeField, -skewX * 0.65, -skewY * 0.35, width / apertureScale, height * apertureScale);
   ctx.restore();
 
   ctx.save();
@@ -466,7 +508,7 @@ function renderGradient() {
   ctx.globalAlpha = 0.08 + state.depth / 1400;
   ctx.globalCompositeOperation = 'overlay';
   ctx.filter = `blur(${baseBlur * 1.7}px) saturate(1.08)`;
-  ctx.drawImage(recipeField, width * -0.018, height * 0.012, width * 1.036, height * 0.976);
+  ctx.drawImage(recipeField, width * -0.018 + skewX * 0.5, height * 0.012, width * 1.036, height * 0.976);
   ctx.restore();
 
   finishPanel(ctx, width, height, baseBlur);
