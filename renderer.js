@@ -52,14 +52,23 @@ const RECIPE_BY_PALETTE = {
 };
 
 const HARMONY_SCHEMES = {
-  aurora: { range: [178, 225], offsets: [0, -28, 22, 46, 126], drift: 16 },
-  cyan: { range: [160, 190], offsets: [0, 22, -14, 36, 78], drift: 12 },
-  ember: { range: [5, 28], offsets: [0, 318, 338, 18, 358], drift: 10 },
-  chroma: { range: [198, 232], offsets: [0, 58, 124, 156, 174], drift: 18 },
-  violet: { range: [260, 288], offsets: [0, 20, 46, 70, 8], drift: 12 },
-  dusk: { range: [286, 335], offsets: [0, 32, 62, 98, 130], drift: 18 },
-  glacial: { range: [205, 222], offsets: [0, 18, 34, -12, 58], drift: 9 },
+  aurora: { range: [150, 265], drift: 24, light: 1.02 },
+  cyan: { range: [130, 215], drift: 20, light: 1.04 },
+  ember: { range: [348, 45], drift: 18, light: 1 },
+  chroma: { range: [0, 360], drift: 30, light: 1 },
+  violet: { range: [238, 326], drift: 22, light: 0.98 },
+  dusk: { range: [286, 35], drift: 26, light: 1.01 },
+  glacial: { range: [180, 252], drift: 16, light: 1.08 },
 };
+
+const HARMONY_ARCHETYPES = [
+  { offsets: [0, 42, 168, 206, 318], name: 'split' },
+  { offsets: [0, -34, 28, 132, 186], name: 'aural' },
+  { offsets: [0, 72, 148, 218, 286], name: 'triadic' },
+  { offsets: [0, 22, 96, 178, 244], name: 'prismatic' },
+  { offsets: [0, 116, 184, 232, 330], name: 'tension' },
+  { offsets: [0, -52, 54, 196, 260], name: 'thermal' },
+];
 
 const INITIAL_SEED = 0.4177;
 
@@ -168,20 +177,22 @@ function generatedPalette(mood, seed) {
   const scheme = HARMONY_SCHEMES[mood] ?? HARMONY_SCHEMES.chroma;
   const random = randomFrom(`palette:${mood}:${seed}`);
   const root = hueInRange(scheme.range, random);
-  const variance = 0.92 + random() * 0.16;
-  const hue = (index) => jitterHue(root + scheme.offsets[index], scheme.drift, random);
+  const archetype = pick(random, HARMONY_ARCHETYPES);
+  const variance = (0.88 + random() * 0.22) * scheme.light;
+  const hue = (index) => jitterHue(root + archetype.offsets[index], scheme.drift, random);
   const rimHue = hue(0);
   const bodyHue = hue(1);
   const lowerHue = hue(2);
   const accentHue = hue(3);
   const coreHue = hue(4);
+  const heat = random();
 
   return [
     hslToHex(coreHue, 0.72 + random() * 0.2, 0.025 + random() * 0.02),
-    hslToHex(rimHue, 0.92 + random() * 0.08, (0.48 + random() * 0.08) * variance),
-    hslToHex(bodyHue, 0.9 + random() * 0.09, (0.48 + random() * 0.12) * variance),
-    hslToHex(lowerHue, 0.82 + random() * 0.16, clamp((0.62 + random() * 0.14) * variance, 0.54, 0.78)),
-    hslToHex(accentHue, 0.94 + random() * 0.06, (0.5 + random() * 0.1) * variance),
+    hslToHex(rimHue, 0.82 + random() * 0.18, clamp((0.44 + heat * 0.14) * variance, 0.35, 0.62)),
+    hslToHex(bodyHue, 0.78 + random() * 0.2, clamp((0.43 + random() * 0.18) * variance, 0.34, 0.68)),
+    hslToHex(lowerHue, 0.72 + random() * 0.24, clamp((0.58 + random() * 0.18) * variance, 0.48, 0.82)),
+    hslToHex(accentHue, 0.88 + random() * 0.12, clamp((0.46 + random() * 0.18) * variance, 0.38, 0.7)),
     hslToHex(coreHue, 0.72 + random() * 0.18, 0.018 + random() * 0.026),
   ];
 }
@@ -439,6 +450,11 @@ function blendTuning() {
 function tintRecipeColor(hex, u, v) {
   const palette = state.colors.length >= 5 ? state.colors : PALETTES[state.paletteMood];
   const [, rim, body, lower, accent = body, dark = palette[0]] = palette;
+  const rimRgb = hexToRgb(rim);
+  const bodyRgb = hexToRgb(body);
+  const lowerRgb = hexToRgb(lower);
+  const accentRgb = hexToRgb(accent);
+  const darkRgb = hexToRgb(dark);
   const profile = architectureProfile();
   const depth = state.depth / 100;
   const aperture = state.core / 100;
@@ -451,6 +467,7 @@ function tintRecipeColor(hex, u, v) {
   const coreH = profile.coreH * (0.72 + aperture * 0.74);
   const rgb = hexToRgb(hex);
   const luminance = (rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722) / 255;
+  const sourceColorfulness = (Math.max(...rgb) - Math.min(...rgb)) / 255;
   const bottom = smoothstep(0.52, 0.9, warpedV) * profile.bottomPower;
   const top = smoothstep(0.42, 0.04, warpedV) * profile.topPower;
   const center = gaussian(warpedU, centerX, coreW * 1.25) * gaussian(warpedV, centerY, coreH * 1.08);
@@ -465,9 +482,17 @@ function tintRecipeColor(hex, u, v) {
   else if (top > 0.52) target = mix(body, dark, 0.42);
   else target = body;
 
-  let result = mixRgb(rgb, hexToRgb(target), 0.06 + depth * 0.05);
-  result = mixRgb(result, hexToRgb(accent), halo * (0.18 + depth * 0.18));
-  result = mixRgb(result, hexToRgb(dark), core * (0.4 + aperture * 0.42));
+  const targetRgb = hexToRgb(target);
+  const tonal = mixRgb(
+    mixRgb(darkRgb, targetRgb, smoothstep(0.06, 0.62, luminance)),
+    lowerRgb,
+    bottom * smoothstep(0.18, 0.78, luminance) * 0.42,
+  );
+  let result = mixRgb(rgb, tonal, 0.72 + depth * 0.18);
+  result = mixRgb(result, rimRgb, smoothstep(0.78, 0.28, Math.min(warpedU, 1 - warpedU, warpedV, 1 - warpedV)) * 0.28);
+  result = mixRgb(result, bodyRgb, (1 - sourceColorfulness) * 0.18);
+  result = mixRgb(result, accentRgb, halo * (0.2 + depth * 0.2));
+  result = mixRgb(result, darkRgb, core * (0.45 + aperture * 0.42));
   return result;
 }
 
