@@ -12,6 +12,10 @@ The UI mirrors the Hiro app interaction model:
   asymmetry, and grain.
 - Export the current canvas as PNG.
 
+Color palettes are generated from deterministic harmony recipes during
+randomization, so each mood produces fresh colorways while keeping coherent
+roles for base, rim, body, lower glow, accent, and core.
+
 ## Run
 
 ```sh

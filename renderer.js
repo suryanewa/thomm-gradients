@@ -51,8 +51,20 @@ const RECIPE_BY_PALETTE = {
   glacial: 'blue-iris',
 };
 
+const HARMONY_SCHEMES = {
+  aurora: { range: [178, 225], offsets: [0, -28, 22, 46, 126], drift: 16 },
+  cyan: { range: [160, 190], offsets: [0, 22, -14, 36, 78], drift: 12 },
+  ember: { range: [5, 28], offsets: [0, 318, 338, 18, 358], drift: 10 },
+  chroma: { range: [198, 232], offsets: [0, 58, 124, 156, 174], drift: 18 },
+  violet: { range: [260, 288], offsets: [0, 20, 46, 70, 8], drift: 12 },
+  dusk: { range: [286, 335], offsets: [0, 32, 62, 98, 130], drift: 18 },
+  glacial: { range: [205, 222], offsets: [0, 18, 34, -12, 58], drift: 9 },
+};
+
+const INITIAL_SEED = 0.4177;
+
 const state = {
-  colors: [...PALETTES.chroma],
+  colors: [],
   ratio: 'portrait',
   paletteMood: 'chroma',
   architecture: 'aperture',
@@ -64,7 +76,7 @@ const state = {
   core: 48,
   asymmetry: 18,
   grain: 18,
-  seed: Math.random(),
+  seed: INITIAL_SEED,
 };
 
 const locks = {};
@@ -118,6 +130,60 @@ function hexToRgb(hex) {
 
 function rgbToHex([r, g, b]) {
   return `#${[r, g, b].map((v) => clamp(Math.round(v), 0, 255).toString(16).padStart(2, '0')).join('')}`;
+}
+
+function wrapHue(hue) {
+  return ((hue % 360) + 360) % 360;
+}
+
+function hslToHex(hue, saturation, lightness) {
+  const h = wrapHue(hue) / 360;
+  const s = clamp(saturation, 0, 1);
+  const l = clamp(lightness, 0, 1);
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  const hueToRgb = (t) => {
+    let value = t;
+    if (value < 0) value += 1;
+    if (value > 1) value -= 1;
+    if (value < 1 / 6) return p + (q - p) * 6 * value;
+    if (value < 1 / 2) return q;
+    if (value < 2 / 3) return p + (q - p) * (2 / 3 - value) * 6;
+    return p;
+  };
+  return rgbToHex([hueToRgb(h + 1 / 3), hueToRgb(h), hueToRgb(h - 1 / 3)].map((channel) => channel * 255));
+}
+
+function hueInRange(range, random) {
+  const [start, end] = range;
+  const span = end >= start ? end - start : end + 360 - start;
+  return wrapHue(start + random() * span);
+}
+
+function jitterHue(hue, drift, random) {
+  return wrapHue(hue + (random() - 0.5) * drift * 2);
+}
+
+function generatedPalette(mood, seed) {
+  const scheme = HARMONY_SCHEMES[mood] ?? HARMONY_SCHEMES.chroma;
+  const random = randomFrom(`palette:${mood}:${seed}`);
+  const root = hueInRange(scheme.range, random);
+  const variance = 0.92 + random() * 0.16;
+  const hue = (index) => jitterHue(root + scheme.offsets[index], scheme.drift, random);
+  const rimHue = hue(0);
+  const bodyHue = hue(1);
+  const lowerHue = hue(2);
+  const accentHue = hue(3);
+  const coreHue = hue(4);
+
+  return [
+    hslToHex(coreHue, 0.72 + random() * 0.2, 0.025 + random() * 0.02),
+    hslToHex(rimHue, 0.92 + random() * 0.08, (0.48 + random() * 0.08) * variance),
+    hslToHex(bodyHue, 0.9 + random() * 0.09, (0.48 + random() * 0.12) * variance),
+    hslToHex(lowerHue, 0.82 + random() * 0.16, clamp((0.62 + random() * 0.14) * variance, 0.54, 0.78)),
+    hslToHex(accentHue, 0.94 + random() * 0.06, (0.5 + random() * 0.1) * variance),
+    hslToHex(coreHue, 0.72 + random() * 0.18, 0.018 + random() * 0.026),
+  ];
 }
 
 function mix(a, b, t) {
@@ -630,7 +696,8 @@ function populateSelect(id, options) {
   select.addEventListener('change', () => {
     state[id] = select.value;
     if (id === 'paletteMood') {
-      state.colors = [...PALETTES[state.paletteMood]];
+      state.seed = Math.random();
+      state.colors = generatedPalette(state.paletteMood, state.seed);
       renderColors();
     }
     renderGradient();
@@ -664,8 +731,8 @@ function randomize() {
   const random = Math.random;
   const architecturePool = ['aperture', 'aperture', 'aperture', 'field', 'horizon', 'monolith'];
   const blendPool = ['screen', 'screen', 'soft-light', 'overlay'];
+  const nextSeed = Math.random();
   if (!locks.paletteMood) state.paletteMood = pick(random, PALETTE_OPTIONS.map(([value]) => value));
-  if (!locks.colors) state.colors = remixPalette(PALETTES[state.paletteMood], random);
   if (!locks.architecture) state.architecture = pick(random, architecturePool);
   if (!locks.blendMode) state.blendMode = pick(random, blendPool);
   if (!locks.blur) state.blur = Math.round(36 + random() * 34);
@@ -675,16 +742,10 @@ function randomize() {
   if (!locks.core) state.core = Math.round(32 + random() * 48);
   if (!locks.asymmetry) state.asymmetry = Math.round(random() * 46);
   if (!locks.grain) state.grain = Math.round(8 + random() * 32);
-  state.seed = Math.random();
+  state.seed = nextSeed;
+  if (!locks.colors) state.colors = generatedPalette(state.paletteMood, state.seed);
   syncControls();
   renderGradient();
-}
-
-function remixPalette(base, random) {
-  return base.map((color, index) => {
-    const amount = (random() - 0.5) * (index === 0 ? 0.16 : 0.28);
-    return shiftColor(color, amount);
-  });
 }
 
 function syncControls() {
@@ -753,6 +814,7 @@ document.querySelector('#ratio-group').addEventListener('click', (event) => {
 
 window.addEventListener('resize', updateCanvasSize);
 
+state.colors = generatedPalette(state.paletteMood, state.seed);
 populateSelect('paletteMood', PALETTE_OPTIONS);
 populateSelect('architecture', ARCHITECTURES);
 populateSelect('blendMode', BLENDS);
