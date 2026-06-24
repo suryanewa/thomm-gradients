@@ -30,7 +30,6 @@ const ARCHITECTURES = [
   ['aperture', 'Aperture'],
   ['field', 'Field'],
   ['horizon', 'Horizon'],
-  ['diptych', 'Diptych'],
   ['monolith', 'Monolith'],
 ];
 
@@ -344,7 +343,6 @@ function panelColorAt(u, v, random, palette, variant = 0) {
 }
 
 function recipeForState() {
-  if (state.architecture === 'diptych') return studyById('blue-cyan-pair');
   if (state.architecture === 'horizon') return studyById('blue-room');
   if (state.architecture === 'monolith' && state.paletteMood === 'ember') return studyById('chromatic-ember');
   return studyById(RECIPE_BY_PALETTE[state.paletteMood] ?? 'ember-rose');
@@ -622,7 +620,7 @@ function bindSlider(id) {
 
 function randomize() {
   const random = Math.random;
-  const architecturePool = ['aperture', 'aperture', 'aperture', 'horizon', 'diptych', 'monolith'];
+  const architecturePool = ['aperture', 'aperture', 'aperture', 'field', 'horizon', 'monolith'];
   const blendPool = ['screen', 'screen', 'soft-light', 'overlay'];
   if (!locks.paletteMood) state.paletteMood = pick(random, PALETTE_OPTIONS.map(([value]) => value));
   if (!locks.colors) state.colors = remixPalette(PALETTES[state.paletteMood], random);
