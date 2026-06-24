@@ -1,9 +1,16 @@
 import { sampledStudies } from './sampled-recipes.js';
 
+const urlParams = new URLSearchParams(window.location.search);
+const isExportMode = urlParams.has('export');
+const isFramelessExport = urlParams.has('frameless');
+const isNoHolesExport = urlParams.has('noHoles');
+const forcedRecipeId = urlParams.get('recipe');
+
 const RATIOS = {
   portrait: { width: 1080, height: 1346 },
   square: { width: 1200, height: 1200 },
   wide: { width: 1600, height: 900 },
+  card: { width: 1300, height: 800 },
 };
 
 const PALETTES = {
@@ -14,6 +21,7 @@ const PALETTES = {
   violet: ['#07000c', '#5b00ff', '#b513ff', '#d982ff', '#8220ff', '#130018'],
   dusk: ['#07000f', '#2612ff', '#d525ff', '#f38fd1', '#e8531d', '#3a0715'],
   glacial: ['#05040e', '#0715ff', '#0e96ff', '#9bdcff', '#0088ff', '#080725'],
+  solar: ['#120a01', '#ffe84a', '#ff8a00', '#ff4f8b', '#6dff8f', '#1b0900'],
 };
 
 const PALETTE_OPTIONS = [
@@ -24,6 +32,7 @@ const PALETTE_OPTIONS = [
   ['violet', 'Violet'],
   ['dusk', 'Dusk'],
   ['glacial', 'Glacial'],
+  ['solar', 'Solar'],
 ];
 
 const ARCHITECTURES = [
@@ -49,17 +58,78 @@ const RECIPE_BY_PALETTE = {
   violet: 'violet-well',
   dusk: 'violet-sunset',
   glacial: 'blue-iris',
+  solar: 'ember-rose',
 };
 
 const HARMONY_SCHEMES = {
-  aurora: { range: [178, 225], offsets: [0, -28, 22, 46, 126], drift: 16 },
-  cyan: { range: [160, 190], offsets: [0, 22, -14, 36, 78], drift: 12 },
-  ember: { range: [5, 28], offsets: [0, 318, 338, 18, 358], drift: 10 },
-  chroma: { range: [198, 232], offsets: [0, 58, 124, 156, 174], drift: 18 },
-  violet: { range: [260, 288], offsets: [0, 20, 46, 70, 8], drift: 12 },
-  dusk: { range: [286, 335], offsets: [0, 32, 62, 98, 130], drift: 18 },
-  glacial: { range: [205, 222], offsets: [0, 18, 34, -12, 58], drift: 9 },
+  aurora: { stories: [0, 1, 3, 5], drift: 8, bias: 0.58 },
+  cyan: { stories: [1, 3, 4], drift: 7, bias: 0.48 },
+  ember: { stories: [2, 6, 0], drift: 7, bias: 0.72 },
+  chroma: { stories: [0, 2, 3, 6], drift: 10, bias: 0.56 },
+  violet: { stories: [3, 4, 5], drift: 8, bias: 0.46 },
+  dusk: { stories: [2, 5, 6], drift: 8, bias: 0.64 },
+  glacial: { stories: [1, 4, 0], drift: 6, bias: 0.38 },
+  solar: { stories: [6, 2, 1], drift: 9, bias: 0.78 },
 };
+
+const HARMONY_STORIES = [
+  {
+    rim: [[182, 204]],
+    body: [[224, 252], [282, 314]],
+    lower: [[322, 356]],
+    accent: [[8, 28], [300, 324]],
+    dark: [[224, 276]],
+    glow: 0.73,
+  },
+  {
+    rim: [[188, 214], [210, 234]],
+    body: [[170, 198], [200, 226]],
+    lower: [[206, 238]],
+    accent: [[262, 304]],
+    dark: [[238, 284]],
+    glow: 0.72,
+  },
+  {
+    rim: [[8, 28], [336, 356]],
+    body: [[300, 332]],
+    lower: [[336, 14]],
+    accent: [[212, 246], [258, 286]],
+    dark: [[348, 24], [268, 304]],
+    glow: 0.74,
+  },
+  {
+    rim: [[176, 202]],
+    body: [[288, 322]],
+    lower: [[270, 304], [328, 354]],
+    accent: [[320, 348], [198, 224]],
+    dark: [[234, 282]],
+    glow: 0.7,
+  },
+  {
+    rim: [[206, 236]],
+    body: [[188, 218]],
+    lower: [[202, 230]],
+    accent: [[258, 296]],
+    dark: [[226, 266]],
+    glow: 0.77,
+  },
+  {
+    rim: [[308, 334], [326, 352]],
+    body: [[254, 292]],
+    lower: [[334, 18]],
+    accent: [[178, 206]],
+    dark: [[276, 322]],
+    glow: 0.68,
+  },
+  {
+    rim: [[12, 32]],
+    body: [[318, 348]],
+    lower: [[334, 10], [204, 228]],
+    accent: [[204, 238], [354, 18]],
+    dark: [[350, 26], [238, 282]],
+    glow: 0.76,
+  },
+];
 
 const INITIAL_SEED = 0.4177;
 
@@ -85,6 +155,10 @@ const wrapper = document.querySelector('.canvas-wrapper');
 const previewWrapper = document.querySelector('.preview-content-wrapper');
 const colorList = document.querySelector('#color-list');
 const addColorButton = document.querySelector('#add-color');
+
+if (isExportMode) {
+  document.body.classList.add('export-mode');
+}
 
 function hashSeed(value) {
   const text = String(value ?? 'hiro');
@@ -164,25 +238,35 @@ function jitterHue(hue, drift, random) {
   return wrapHue(hue + (random() - 0.5) * drift * 2);
 }
 
+function generatedTone(base, variance, random, spread = 0.08) {
+  return clamp((base + (random() - 0.5) * spread) * variance, 0.02, 0.9);
+}
+
+function hueFromBands(bands, drift, random) {
+  return jitterHue(hueInRange(pick(random, bands), random), drift, random);
+}
+
 function generatedPalette(mood, seed) {
   const scheme = HARMONY_SCHEMES[mood] ?? HARMONY_SCHEMES.chroma;
   const random = randomFrom(`palette:${mood}:${seed}`);
-  const root = hueInRange(scheme.range, random);
-  const variance = 0.92 + random() * 0.16;
-  const hue = (index) => jitterHue(root + scheme.offsets[index], scheme.drift, random);
-  const rimHue = hue(0);
-  const bodyHue = hue(1);
-  const lowerHue = hue(2);
-  const accentHue = hue(3);
-  const coreHue = hue(4);
+  const story = HARMONY_STORIES[pick(random, scheme.stories)] ?? HARMONY_STORIES[0];
+  const variance = 0.88 + random() * 0.24;
+  const contrast = 0.88 + random() * 0.18;
+  const warmth = scheme.bias + (random() - 0.5) * 0.28;
+  const rimHue = hueFromBands(story.rim, scheme.drift, random);
+  const bodyHue = hueFromBands(story.body, scheme.drift, random);
+  const lowerHue = hueFromBands(story.lower, scheme.drift, random);
+  const accentHue = hueFromBands(story.accent, scheme.drift, random);
+  const darkHue = hueFromBands(story.dark, scheme.drift * 0.8, random);
+  const coreHue = hueFromBands(story.dark, scheme.drift * 1.1, random);
 
   return [
-    hslToHex(coreHue, 0.72 + random() * 0.2, 0.025 + random() * 0.02),
-    hslToHex(rimHue, 0.92 + random() * 0.08, (0.48 + random() * 0.08) * variance),
-    hslToHex(bodyHue, 0.9 + random() * 0.09, (0.48 + random() * 0.12) * variance),
-    hslToHex(lowerHue, 0.82 + random() * 0.16, clamp((0.62 + random() * 0.14) * variance, 0.54, 0.78)),
-    hslToHex(accentHue, 0.94 + random() * 0.06, (0.5 + random() * 0.1) * variance),
-    hslToHex(coreHue, 0.72 + random() * 0.18, 0.018 + random() * 0.026),
+    hslToHex(darkHue, 0.66 + random() * 0.22, generatedTone(0.026, contrast, random, 0.026)),
+    hslToHex(rimHue, 0.9 + random() * 0.1, generatedTone(0.48 + warmth * 0.07, variance, random, 0.13)),
+    hslToHex(bodyHue, 0.84 + random() * 0.14, generatedTone(0.45 + (1 - warmth) * 0.1, variance, random, 0.16)),
+    hslToHex(lowerHue, 0.72 + random() * 0.2, generatedTone(story.glow, variance, random, 0.18)),
+    hslToHex(accentHue, 0.88 + random() * 0.12, generatedTone(0.52 + warmth * 0.1, variance, random, 0.15)),
+    hslToHex(coreHue, 0.7 + random() * 0.2, generatedTone(0.022, contrast, random, 0.03)),
   ];
 }
 
@@ -227,6 +311,8 @@ function roundedRect(ctx, x, y, width, height, radius) {
 }
 
 function recipeForState() {
+  if (forcedRecipeId) return studyById(forcedRecipeId);
+  if (isNoHolesExport) return studyById('blue-room');
   if (state.architecture === 'horizon') return studyById('blue-room');
   if (state.architecture === 'monolith') return studyById(state.paletteMood === 'ember' ? 'chromatic-ember' : RECIPE_BY_PALETTE[state.paletteMood]);
   if (state.architecture === 'field' && state.paletteMood === 'chroma') return studyById('violet-sunset');
@@ -273,19 +359,19 @@ function tintRecipeColor(hex, u, v) {
   const top = smoothstep(0.42, 0.04, warpedV) * profile.topPower;
   const center = gaussian(warpedU, centerX, coreW * 1.25) * gaussian(warpedV, centerY, coreH * 1.08);
   const coreDistance = Math.max(Math.abs((warpedU - centerX) / coreW), Math.abs((warpedV - centerY) / coreH));
-  const core = smoothstep(1.06, 0.42, coreDistance) * profile.corePower;
+  const core = isNoHolesExport ? 0 : smoothstep(1.06, 0.42, coreDistance) * profile.corePower;
   const halo = smoothstep(1.8, 0.84, coreDistance) * profile.haloPower;
   let target = rim;
 
-  if (luminance < 0.12) target = dark;
+  if (luminance < 0.12) target = isNoHolesExport ? mix(body, lower, 0.45) : dark;
   else if (bottom > 0.58) target = lower;
   else if (center > 0.56) target = accent;
   else if (top > 0.52) target = mix(body, dark, 0.42);
   else target = body;
 
-  let result = mixRgb(rgb, hexToRgb(target), 0.06 + depth * 0.05);
-  result = mixRgb(result, hexToRgb(accent), halo * (0.18 + depth * 0.18));
-  result = mixRgb(result, hexToRgb(dark), core * (0.4 + aperture * 0.42));
+  let result = isNoHolesExport && luminance < 0.24 ? hexToRgb(target) : mixRgb(rgb, hexToRgb(target), 0.1 + depth * 0.08);
+  result = mixRgb(result, hexToRgb(accent), halo * (0.2 + depth * 0.2));
+  result = mixRgb(result, hexToRgb(dark), core * (0.42 + aperture * 0.42));
   return result;
 }
 
@@ -367,33 +453,39 @@ function finishPanel(ctx, width, height, baseBlur) {
   ctx.drawImage(canvas, 0, 0);
   ctx.restore();
 
-  ctx.save();
-  ctx.filter = `blur(${baseBlur * 0.34}px)`;
-  ctx.globalAlpha = 0.9;
-  ctx.strokeStyle = '#020202';
-  ctx.lineWidth = width * 0.08;
-  roundedRect(ctx, width * 0.034, height * 0.026, width * 0.932, height * 0.948, width * 0.04);
-  ctx.stroke();
-  ctx.restore();
+  if (!isFramelessExport) {
+    ctx.save();
+    ctx.filter = `blur(${baseBlur * 0.34}px)`;
+    ctx.globalAlpha = 0.9;
+    ctx.strokeStyle = '#020202';
+    ctx.lineWidth = width * 0.08;
+    roundedRect(ctx, width * 0.034, height * 0.026, width * 0.932, height * 0.948, width * 0.04);
+    ctx.stroke();
+    ctx.restore();
+  }
 
-  ctx.save();
-  ctx.globalCompositeOperation = 'multiply';
-  ctx.globalAlpha = 0.42;
-  const shade = ctx.createLinearGradient(0, 0, 0, height);
-  shade.addColorStop(0, 'rgba(0,0,0,0.7)');
-  shade.addColorStop(0.18, 'rgba(0,0,0,0.05)');
-  shade.addColorStop(0.78, 'rgba(0,0,0,0)');
-  shade.addColorStop(1, 'rgba(0,0,0,0.75)');
-  ctx.fillStyle = shade;
-  ctx.fillRect(0, 0, width, height);
-  ctx.restore();
+  if (!isFramelessExport) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.globalAlpha = 0.42;
+    const shade = ctx.createLinearGradient(0, 0, 0, height);
+    shade.addColorStop(0, 'rgba(0,0,0,0.7)');
+    shade.addColorStop(0.18, 'rgba(0,0,0,0.05)');
+    shade.addColorStop(0.78, 'rgba(0,0,0,0)');
+    shade.addColorStop(1, 'rgba(0,0,0,0.75)');
+    ctx.fillStyle = shade;
+    ctx.fillRect(0, 0, width, height);
+    ctx.restore();
+  }
 
-  ctx.save();
-  ctx.globalAlpha = 1;
-  ctx.strokeStyle = '#050505';
-  ctx.lineWidth = Math.max(6, width * 0.028);
-  ctx.strokeRect(width * 0.018, width * 0.018, width - width * 0.036, height - width * 0.036);
-  ctx.restore();
+  if (!isFramelessExport) {
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = '#050505';
+    ctx.lineWidth = Math.max(6, width * 0.028);
+    ctx.strokeRect(width * 0.018, width * 0.018, width - width * 0.036, height - width * 0.036);
+    ctx.restore();
+  }
 }
 
 function drawGrain(ctx, width, height) {
@@ -420,8 +512,16 @@ function drawGrain(ctx, width, height) {
 }
 
 function updateCanvasSize() {
-  const availableHeight = Math.max(360, window.innerHeight - 96);
   const ratio = RATIOS[state.ratio];
+  if (isExportMode) {
+    wrapper.style.width = `${ratio.width}px`;
+    wrapper.style.height = `${ratio.height}px`;
+    previewWrapper.style.width = `${ratio.width}px`;
+    previewWrapper.style.height = `${ratio.height}px`;
+    return;
+  }
+
+  const availableHeight = Math.max(360, window.innerHeight - 96);
   const scale = Math.min(1, availableHeight / ratio.height);
   const displayWidth = Math.round(ratio.width * scale);
   const displayHeight = Math.round(ratio.height * scale);
@@ -548,6 +648,16 @@ function exportPng() {
   link.click();
 }
 
+function setRenderState(nextState = {}) {
+  Object.assign(state, nextState);
+  if (nextState.paletteMood || nextState.seed || !state.colors.length) {
+    state.colors = generatedPalette(state.paletteMood, state.seed);
+  }
+  syncControls();
+  renderGradient();
+  return canvas.toDataURL('image/png');
+}
+
 function isTypingTarget(target) {
   return target.closest('input, textarea, select, button, a[href], [contenteditable="true"]');
 }
@@ -591,6 +701,15 @@ document.querySelector('#ratio-group').addEventListener('click', (event) => {
 
 window.addEventListener('resize', updateCanvasSize);
 
+if (urlParams.has('ratio')) state.ratio = urlParams.get('ratio');
+if (urlParams.has('paletteMood')) state.paletteMood = urlParams.get('paletteMood');
+if (urlParams.has('architecture')) state.architecture = urlParams.get('architecture');
+if (urlParams.has('blendMode')) state.blendMode = urlParams.get('blendMode');
+if (urlParams.has('seed')) state.seed = Number(urlParams.get('seed'));
+['blur', 'bloom', 'contrast', 'depth', 'core', 'asymmetry', 'grain'].forEach((key) => {
+  if (urlParams.has(key)) state[key] = Number(urlParams.get(key));
+});
+
 state.colors = generatedPalette(state.paletteMood, state.seed);
 populateSelect('paletteMood', PALETTE_OPTIONS);
 populateSelect('architecture', ARCHITECTURES);
@@ -598,3 +717,10 @@ populateSelect('blendMode', BLENDS);
 ['blur', 'bloom', 'contrast', 'depth', 'core', 'asymmetry', 'grain'].forEach(bindSlider);
 renderColors();
 renderGradient();
+
+window.hiroGradientStudio = {
+  state,
+  renderGradient,
+  setRenderState,
+  exportDataUrl: () => canvas.toDataURL('image/png'),
+};
