@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hiro Luminous Gradient Studio</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-container">
+      <aside class="sidebar">
+        <header class="sidebar-header">
+          <div class="sidebar-title">
+            <span class="sidebar-logo" aria-hidden="true"></span>
+            <span class="logo-text">hiro studies</span>
+          </div>
+        </header>
+
+        <section class="control-group">
+          <div class="control-header">
+            <button class="control-label lockable-label" type="button" data-lock="colors">Colors</button>
+            <button class="btn-icon-add" type="button" id="add-color" title="Add color">
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+          <div class="color-list" id="color-list"></div>
+        </section>
+
+        <section class="control-group">
+          <div class="control-label">Aspect Ratio</div>
+          <div class="aspect-ratios" id="ratio-group">
+            <button class="ratio-btn active" type="button" data-ratio="portrait" title="9:16"><span class="ratio-icon ratio-portrait"></span></button>
+            <button class="ratio-btn" type="button" data-ratio="square" title="1:1"><span class="ratio-icon ratio-square"></span></button>
+            <button class="ratio-btn" type="button" data-ratio="wide" title="16:9"><span class="ratio-icon ratio-wide"></span></button>
+          </div>
+        </section>
+
+        <section class="control-group">
+          <div class="animated-select">
+            <div class="setting-row">
+              <button class="control-label lockable-label" type="button" data-lock="paletteMood">Palette</button>
+              <select class="select-input" id="paletteMood"></select>
+            </div>
+          </div>
+        </section>
+
+        <section class="control-group">
+          <div class="animated-select">
+            <div class="setting-row">
+              <button class="control-label lockable-label" type="button" data-lock="architecture">Form</button>
+              <select class="select-input" id="architecture"></select>
+            </div>
+          </div>
+        </section>
+
+        <section class="control-group">
+          <div class="animated-select">
+            <div class="setting-row">
+              <button class="control-label lockable-label" type="button" data-lock="blendMode">Blend</button>
+              <select class="select-input" id="blendMode"></select>
+            </div>
+          </div>
+        </section>
+
+        <section class="control-group slider-control" data-param="blur">
+          <div class="slider-header">
+            <button class="control-label lockable-label" type="button" data-lock="blur">Blur</button>
+            <span class="slider-value" id="blur-value"></span>
+          </div>
+          <div class="taki-slider-control"><input id="blur" class="taki-slider-native" type="range" min="12" max="90" step="1" /></div>
+        </section>
+
+        <section class="control-group slider-control" data-param="bloom">
+          <div class="slider-header">
+            <button class="control-label lockable-label" type="button" data-lock="bloom">Bloom</button>
+            <span class="slider-value" id="bloom-value"></span>
+          </div>
+          <div class="taki-slider-control"><input id="bloom" class="taki-slider-native" type="range" min="0" max="100" step="1" /></div>
+        </section>
+
+        <section class="control-group slider-control" data-param="contrast">
+          <div class="slider-header">
+            <button class="control-label lockable-label" type="button" data-lock="contrast">Contrast</button>
+            <span class="slider-value" id="contrast-value"></span>
+          </div>
+          <div class="taki-slider-control"><input id="contrast" class="taki-slider-native" type="range" min="70" max="150" step="1" /></div>
+        </section>
+
+        <section class="control-group slider-control" data-param="depth">
+          <div class="slider-header">
+            <button class="control-label lockable-label" type="button" data-lock="depth">Depth</button>
+            <span class="slider-value" id="depth-value"></span>
+          </div>
+          <div class="taki-slider-control"><input id="depth" class="taki-slider-native" type="range" min="0" max="100" step="1" /></div>
+        </section>
+
+        <section class="control-group slider-control" data-param="core">
+          <div class="slider-header">
+            <button class="control-label lockable-label" type="button" data-lock="core">Aperture</button>
+            <span class="slider-value" id="core-value"></span>
+          </div>
+          <div class="taki-slider-control"><input id="core" class="taki-slider-native" type="range" min="0" max="100" step="1" /></div>
+        </section>
+
+        <section class="control-group slider-control" data-param="asymmetry">
+          <div class="slider-header">
+            <button class="control-label lockable-label" type="button" data-lock="asymmetry">Asymmetry</button>
+            <span class="slider-value" id="asymmetry-value"></span>
+          </div>
+          <div class="taki-slider-control"><input id="asymmetry" class="taki-slider-native" type="range" min="0" max="100" step="1" /></div>
+        </section>
+
+        <section class="control-group slider-control" data-param="grain">
+          <div class="slider-header">
+            <button class="control-label lockable-label" type="button" data-lock="grain">Grain</button>
+            <span class="slider-value" id="grain-value"></span>
+          </div>
+          <div class="taki-slider-control"><input id="grain" class="taki-slider-native" type="range" min="0" max="100" step="1" /></div>
+        </section>
+
+        <section class="actions-grid pt-4 mt-auto">
+          <button type="button" class="btn-secondary" id="randomize">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Random
+          </button>
+          <button type="button" class="btn-primary" id="export">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Export
+          </button>
+        </section>
+      </aside>
+
+      <section class="main-content">
+        <div class="preview-scroll-container">
+          <div class="preview-content-wrapper">
+            <div class="canvas-absolute-center" id="preview-center">
+              <div class="canvas-wrapper">
+                <canvas id="gradient-canvas"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./renderer.js"></script>
+  </body>
+</html>
